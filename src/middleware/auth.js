@@ -16,7 +16,7 @@ import { verifyPlayer } from "../models/player.model.js";
  * Require a valid player session.
  * Attaches req.player on success.
  */
-export function requirePlayer(req, res, next) {
+export async function requirePlayer(req, res, next) {
   const playerId = req.headers["x-player-id"];
   const playerPin = req.headers["x-player-pin"];
 
@@ -27,7 +27,7 @@ export function requirePlayer(req, res, next) {
     });
   }
 
-  const player = verifyPlayer(playerId, playerPin);
+  const player = await verifyPlayer(playerId, playerPin);
   if (!player) {
     return res.status(401).json({
       error: "AUTH_INVALID",

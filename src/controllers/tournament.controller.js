@@ -55,7 +55,7 @@ export function getOne(req, res) {
  * GET /api/tournaments/:id/current-round
  * Returns: current active round info
  */
-export function getCurrent(req, res) {
+export async function getCurrent(req, res) {
   const t = getTournament(req.params.id);
   if (!t) {
     return res.status(404).json({
@@ -75,10 +75,10 @@ export function getCurrent(req, res) {
   }
 
   // Include player info
-  const players = round.players.map((pid) => {
-    const p = getPlayer(pid);
+  const players = await Promise.all(round.players.map(async (pid) => {
+    const p = await getPlayer(pid);
     return p ? { id: p.id, name: p.name, avatar: p.avatar, school: p.school } : { id: pid };
-  });
+  }));
 
   res.json({
     tournamentId: t.id,
@@ -117,7 +117,7 @@ export function start(req, res) {
  *
  * Records a race result for the current tournament round.
  */
-export function submitRoundResult(req, res) {
+export async function submitRoundResult(req, res) {
   const t = getTournament(req.params.id);
   if (!t) {
     return res.status(404).json({
@@ -158,7 +158,7 @@ export function submitRoundResult(req, res) {
   });
 
   // Update player stats
-  updatePlayerStats(playerId, { score, wpm, accuracy });
+  await updatePlayerStats(playerId, { score, wpm, accuracy });
 
   // Record in tournament
   recordRoundResult(t.id, result.id);
@@ -179,7 +179,7 @@ export function submitRoundResult(req, res) {
  * POST /api/tournaments/:id/advance
  * Admin — finish current round, advance top N to next round.
  */
-export function advance(req, res) {
+export async function advance(req, res) {
   const t = getTournament(req.params.id);
   if (!t) {
     return res.status(404).json({
@@ -215,14 +215,14 @@ export function advance(req, res) {
   res.json({
     success: true,
     tournament: updated,
-    advanced: ranked.slice(0, round.maxAdvance).map((r) => {
-      const p = getPlayer(r.playerId);
+    advanced: await Promise.all(ranked.slice(0, round.maxAdvance).map(async (r) => {
+      const p = await getPlayer(r.playerId);
       return {
         playerId: r.playerId,
         name: p?.name,
         score: r.score,
       };
-    }),
+    })),
     nextStatus: updated.status,
   });
 }

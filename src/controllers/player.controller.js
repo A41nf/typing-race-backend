@@ -16,10 +16,10 @@ import {
  * Body: { id, pin }
  * Returns: player profile + token-like headers
  */
-export function login(req, res) {
+export async function login(req, res) {
   const { id, pin } = req.body;
 
-  const player = verifyPlayer(id.trim().toUpperCase(), pin);
+  const player = await verifyPlayer(id.trim().toUpperCase(), pin);
   if (!player) {
     return res.status(401).json({
       error: "AUTH_INVALID",
@@ -43,8 +43,8 @@ export function login(req, res) {
  * GET /api/players
  * Returns: all players (public info)
  */
-export function listPlayers(_req, res) {
-  const players = getAllPlayers().map(({ pin, ...p }) => p);
+export async function listPlayers(_req, res) {
+  const players = (await getAllPlayers()).map(({ pin, ...p }) => p);
   res.json({ players });
 }
 
@@ -52,8 +52,8 @@ export function listPlayers(_req, res) {
  * GET /api/players/:id
  * Returns: single player profile
  */
-export function getPlayerProfile(req, res) {
-  const player = getPlayer(req.params.id);
+export async function getPlayerProfile(req, res) {
+  const player = await getPlayer(req.params.id);
   if (!player) {
     return res.status(404).json({
       error: "PLAYER_NOT_FOUND",
@@ -70,11 +70,11 @@ export function getPlayerProfile(req, res) {
  * Body: { id, pin, name, school, avatar? }
  * Admin only — register a new player.
  */
-export function registerPlayer(req, res) {
+export async function registerPlayer(req, res) {
   const { id, pin, name, school, avatar } = req.body;
 
   try {
-    const player = createPlayer({
+    const player = await createPlayer({
       id: id.trim().toUpperCase(),
       pin,
       name,
@@ -101,12 +101,12 @@ export function registerPlayer(req, res) {
  * Body: { id?, pin?, name?, school?, avatar? }
  * Admin only — edit an existing player.
  */
-export function editPlayer(req, res) {
+export async function editPlayer(req, res) {
   const currentId = req.params.id?.trim()?.toUpperCase();
   const { id, pin, name, school, avatar } = req.body || {};
 
   try {
-    const player = updatePlayer(currentId, { id, pin, name, school, avatar });
+    const player = await updatePlayer(currentId, { id, pin, name, school, avatar });
     const { pin: _, ...safe } = player;
     res.json({ success: true, player: safe });
   } catch (err) {

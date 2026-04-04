@@ -15,7 +15,7 @@ import { updatePlayerStats } from "../models/player.model.js";
  * Body: { wpm, accuracy, score, time, correctChars, totalKeys, textId?, tournamentId?, round? }
  * Auth: required (X-Player-Id + X-Player-Pin)
  */
-export function submitResult(req, res) {
+export async function submitResult(req, res) {
   const player = req.player; // set by requirePlayer middleware
   const { wpm, accuracy, score, time, correctChars, totalKeys, textId, tournamentId, round } = req.body;
 
@@ -34,7 +34,7 @@ export function submitResult(req, res) {
   });
 
   // Update player's best stats
-  const updatedPlayer = updatePlayerStats(player.id, { score, wpm, accuracy });
+  const updatedPlayer = await updatePlayerStats(player.id, { score, wpm, accuracy });
 
   res.status(201).json({
     success: true,

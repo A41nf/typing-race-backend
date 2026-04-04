@@ -15,13 +15,11 @@
 //   joinedAt: ISO string
 // ─────────────────────────────────────────────────────────
 
-const players = new Map();
+import { db } from "../config/firebaseAdmin.js";
 
-export function createPlayer({ id, pin, name, school, avatar = "🧑‍🎓" }) {
-  if (players.has(id)) {
-    throw new Error("PLAYER_EXISTS");
-  }
+const playersCollection = db.collection("players");
 
+export async function createPlayer({ id, pin, name, school, avatar = "🧑‍🎓" }) {
   const player = {
     id,
     pin,
@@ -35,70 +33,110 @@ export function createPlayer({ id, pin, name, school, avatar = "🧑‍🎓" }) 
     joinedAt: new Date().toISOString(),
   };
 
-  players.set(id, player);
+  const playerRef = playersCollection.doc(id);
+  const snapshot = await playerRef.get();
+  if (snapshot.exists) {
+    throw new Error("PLAYER_EXISTS");
+  }
+
+  await playerRef.set(player);
   return player;
 }
 
-export function getPlayer(id) {
-  return players.get(id) || null;
+export async function getPlayer(id) {
+  const snapshot = await playersCollection.doc(id).get();
+  return snapshot.exists ? snapshot.data() : null;
 }
 
-export function getAllPlayers() {
-  return Array.from(players.values());
+export async function getAllPlayers() {
+  const snapshot = await playersCollection.get();
+  return snapshot.docs.map((doc) => doc.data());
 }
 
-export function verifyPlayer(id, pin) {
-  const player = players.get(id);
+export async function verifyPlayer(id, pin) {
+  const player = await getPlayer(id);
   if (!player) return null;
   if (player.pin !== pin) return null;
   return player;
 }
 
 
-export function updatePlayer(id, updates) {
-  const player = players.get(id);
-  if (!player) throw new Error("PLAYER_NOT_FOUND");
+export async function updatePlayer(id, updates) {
+  return db.runTransaction(async (transaction) => {
+    const currentRef = playersCollection.doc(id);
+    const currentSnap = await transaction.get(currentRef);
 
-  const nextId = (updates.id || id).trim().toUpperCase();
-  if (nextId !== id && players.has(nextId)) {
-    throw new Error("PLAYER_EXISTS");
-  }
+    if (!currentSnap.exists) {
+      throw new Error("PLAYER_NOT_FOUND");
+    }
 
-  const updated = {
-    ...player,
-    id: nextId,
-    pin: (updates.pin ?? player.pin)?.trim?.() ?? player.pin,
-    name: updates.name ?? player.name,
-    school: updates.school ?? player.school,
-    avatar: updates.avatar ?? player.avatar,
-  };
+    const player = currentSnap.data();
+    const nextId = (updates.id || id).trim().toUpperCase();
 
-  if (nextId !== id) players.delete(id);
-  players.set(nextId, updated);
-  return updated;
+    if (nextId !== id) {
+      const nextRef = playersCollection.doc(nextId);
+      const nextSnap = await transaction.get(nextRef);
+      if (nextSnap.exists) {
+        throw new Error("PLAYER_EXISTS");
+      }
+    }
+
+    const updated = {
+      ...player,
+      id: nextId,
+      pin: (updates.pin ?? player.pin)?.trim?.() ?? player.pin,
+      name: updates.name ?? player.name,
+      school: updates.school ?? player.school,
+      avatar: updates.avatar ?? player.avatar,
+    };
+
+    if (nextId !== id) {
+      transaction.set(playersCollection.doc(nextId), updated);
+      transaction.delete(currentRef);
+    } else {
+      transaction.set(currentRef, updated);
+    }
+
+    return updated;
+  });
 }
 
-export function updatePlayerStats(id, { score, wpm, accuracy }) {
-  const player = players.get(id);
-  if (!player) throw new Error("PLAYER_NOT_FOUND");
+export async function updatePlayerStats(id, { score, wpm, accuracy }) {
+  return db.runTransaction(async (transaction) => {
+    const playerRef = playersCollection.doc(id);
+    const snapshot = await transaction.get(playerRef);
+    if (!snapshot.exists) throw new Error("PLAYER_NOT_FOUND");
 
-  player.races += 1;
-  if (score > player.score) player.score = score;
-  if (wpm > player.wpm) player.wpm = wpm;
-  if (accuracy > player.accuracy) player.accuracy = accuracy;
+    const player = snapshot.data();
+    const updated = {
+      ...player,
+      races: player.races + 1,
+      score: score > player.score ? score : player.score,
+      wpm: wpm > player.wpm ? wpm : player.wpm,
+      accuracy: accuracy > player.accuracy ? accuracy : player.accuracy,
+    };
 
-  return player;
+    transaction.set(playerRef, updated);
+    return updated;
+  });
 }
 
-export function deletePlayer(id) {
-  return players.delete(id);
+export async function deletePlayer(id) {
+  const playerRef = playersCollection.doc(id);
+  const snapshot = await playerRef.get();
+  if (!snapshot.exists) return false;
+
+  await playerRef.delete();
+  return true;
 }
 
-export function playerCount() {
-  return players.size;
+export async function playerCount() {
+  const snapshot = await playersCollection.count().get();
+  return snapshot.data().count;
 }
 
 // ── Reset (for testing) ──
-export function resetAllPlayers() {
-  players.clear();
+export async function resetAllPlayers() {
+  const snapshot = await playersCollection.get();
+  await Promise.all(snapshot.docs.map((doc) => doc.ref.delete()));
 }

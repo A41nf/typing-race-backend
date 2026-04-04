@@ -22,7 +22,7 @@ console.log("Seeding players...");
 let created = 0;
 for (const p of DEMO_PLAYERS) {
   try {
-    createPlayer(p);
+    await createPlayer(p);
     created++;
     console.log(`  ✅ ${p.id} — ${p.name}`);
   } catch (err) {

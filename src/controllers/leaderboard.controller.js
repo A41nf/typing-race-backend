@@ -10,12 +10,12 @@ import { getAllPlayers, getPlayer } from "../models/player.model.js";
  * Query: ?limit=20&sort=score|wpm|accuracy
  * Returns: ranked leaderboard with player info
  */
-export function getLeaderboard(req, res) {
+export async function getLeaderboard(req, res) {
   const limit = Math.min(parseInt(req.query.limit) || 20, 100);
   const sort = req.query.sort || "score";
 
   // Get all players and build leaderboard from their best stats
-  const players = getAllPlayers()
+  const players = (await getAllPlayers())
     .filter((p) => p.races > 0) // only players who have raced
     .map(({ pin, ...p }) => p);
 
@@ -50,23 +50,23 @@ export function getLeaderboard(req, res) {
  * Query: ?limit=10
  * Returns: most recent race results (global feed)
  */
-export function getRecentRaces(req, res) {
+export async function getRecentRaces(req, res) {
   const limit = Math.min(parseInt(req.query.limit) || 10, 50);
   const results = getTopResults(200); // get a pool
 
   // Sort by date descending, take limit
-  const recent = results
+  const recent = await Promise.all(results
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, limit)
-    .map((r) => {
-      const player = getPlayer(r.playerId);
+    .map(async (r) => {
+      const player = await getPlayer(r.playerId);
       return {
         ...r,
         playerName: player?.name || "Unknown",
         playerAvatar: player?.avatar || "🧑‍🎓",
         playerSchool: player?.school || "",
       };
-    });
+    }));
 
   res.json({ count: recent.length, results: recent });
 }
@@ -75,8 +75,8 @@ export function getRecentRaces(req, res) {
  * GET /api/leaderboard/player/:id/rank
  * Returns: a specific player's rank across all metrics
  */
-export function getPlayerRank(req, res) {
-  const player = getPlayer(req.params.id);
+export async function getPlayerRank(req, res) {
+  const player = await getPlayer(req.params.id);
   if (!player) {
     return res.status(404).json({
       error: "PLAYER_NOT_FOUND",
@@ -84,7 +84,7 @@ export function getPlayerRank(req, res) {
     });
   }
 
-  const players = getAllPlayers()
+  const players = (await getAllPlayers())
     .filter((p) => p.races > 0)
     .map(({ pin, ...p }) => p);
 
