@@ -219,14 +219,17 @@ export function setupSocket(httpServer) {
           elapsed,
         });
 
-        raceNs.to(room.roomId).emit(EVENTS.PLAYER_PROGRESS_ACK, {
+        const progressPayload = {
           playerId: result.playerId,
           progress: result.progress,
           wpm: result.wpm,
           accuracy: result.accuracy,
           score: result.score,
           finished: result.finished,
-        });
+        };
+
+        raceNs.to(room.roomId).emit(EVENTS.PLAYER_PROGRESS_ACK, progressPayload);
+        raceNs.to(ADMIN_ROOM).emit(EVENTS.PLAYER_PROGRESS_ACK, progressPayload);
       } catch (_err) {
         // Ignore stale progress after race end.
       }
@@ -242,12 +245,15 @@ export function setupSocket(httpServer) {
 
         if (ack) ack({ success: true, stats: result.stats });
 
-        raceNs.to(room.roomId).emit(EVENTS.PLAYER_FINISH_ACK, {
+        const finishPayload = {
           playerId: result.playerId,
           playerName: player?.name,
           stats: result.stats,
           finished: true,
-        });
+        };
+
+        raceNs.to(room.roomId).emit(EVENTS.PLAYER_FINISH_ACK, finishPayload);
+        raceNs.to(ADMIN_ROOM).emit(EVENTS.PLAYER_FINISH_ACK, finishPayload);
 
         console.log(`🏆 ${player?.name} finished: ${result.stats.wpm}WPM ${result.stats.accuracy}% score:${result.stats.score}`);
 
@@ -312,14 +318,16 @@ function handleDisconnect(socket) {
 
 function endRace(io, room) {
   const result = room.finishRace();
-
-  io.of("/race").to(room.roomId).emit(EVENTS.RACE_END, {
+  const payload = {
     roomId: room.roomId,
     standings: result.standings,
     text: result.text,
     textId: result.textId,
     duration: result.duration,
-  });
+  };
+
+  io.of("/race").to(room.roomId).emit(EVENTS.RACE_END, payload);
+  io.of("/race").to(ADMIN_ROOM).emit(EVENTS.RACE_END, payload);
 
   console.log(`🏁 Race ended in ${room.roomId} — Winner: ${result.standings[0]?.name} (${result.standings[0]?.stats.wpm}WPM)`);
 }
