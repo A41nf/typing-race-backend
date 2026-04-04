@@ -1,0 +1,23 @@
+{
+  "name": "typing-race-backend",
+  "version": "1.0.0",
+  "description": "Arabic Typing Race — School Competition Backend",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/utils/seed.js",
+    "seed:mongo": "node src/utils/seed-mongo.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^4.18.2",
+    "firebase-admin": "^13.7.0",
+    "mongoose": "^8.1.0",
+    "nanoid": "^5.0.4",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
+  }
+}
