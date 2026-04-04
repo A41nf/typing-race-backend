@@ -170,8 +170,10 @@ export class RaceRoom {
     if (!player) throw new Error("PLAYER_NOT_IN_ROOM");
     if (player.finished) throw new Error("ALREADY_FINISHED");
 
+    const typedLength = typeof typed === "string" ? typed.length : Number(typed) || 0;
+
     const progress = Math.min(
-      Math.round((typed / this.text.length) * 100),
+      Math.round((typedLength / this.text.length) * 100),
       100
     );
 
@@ -190,7 +192,7 @@ export class RaceRoom {
     player.progress = progress;
 
     // Check if player finished (typed all characters)
-    if (typed >= this.text.length) {
+    if (typedLength >= this.text.length) {
       player.finished = true;
       player.stats = { wpm, accuracy, score, time: elapsed, correctChars, totalKeystrokes };
     }
