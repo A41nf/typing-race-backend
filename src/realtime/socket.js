@@ -1,52 +1,22 @@
 // ─────────────────────────────────────────────────────────
 // src/realtime/socket.js — Socket.io server setup + handlers
 // ─────────────────────────────────────────────────────────
-//
-// Event flow:
-//
-//   Client                    Server                    Room
-//     │                         │                        │
-//     ├── join_room ──────────→ │ ── addPlayer() ──────→ │
-//     │ ← room_joined ─────────┤ ← getPlayerList() ──── │
-//     │ ← room_update ─────────┤ (broadcast)             │
-//     │                         │                        │
-//     ├── player_ready ───────→ │ ── setReady() ───────→ │
-//     │ ← player_ready ────────┤ (broadcast)             │
-//     │                         │                        │
-//     │    [all ready]          │                        │
-//     │ ← all_ready ───────────┤                        │
-//     │ ← countdown_tick(3) ───┤ ── startCountdown() ─→ │
-//     │ ← countdown_tick(2) ───┤                        │
-//     │ ← countdown_tick(1) ───┤                        │
-//     │ ← race_start ──────────┤    (text included)      │
-//     │                         │                        │
-//     ├── player_progress ───→ │ ── updateProgress() ──→ │
-//     │ ← player_progress ─────┤ (broadcast to all)      │
-//     │                         │                        │
-//     ├── player_finish ─────→ │ ── finishPlayer() ────→ │
-//     │ ← player_finish ───────┤ (broadcast)             │
-//     │                         │                        │
-//     │    [all finished]       │ ── finishRace() ─────→ │
-//     │ ← race_end ────────────┤    (standings)          │
-//     │                         │                        │
-//     ├── disconnect ─────────→ │ ── removePlayer() ───→ │
-//     │ ← player_left ─────────┤ (broadcast)             │
-// ─────────────────────────────────────────────────────────
 
 import { Server } from "socket.io";
 import { EVENTS } from "./events.js";
 import {
   getOrCreateDefaultRoom,
-  getRoom,
   getPlayerRoom,
   setPlayerRoom,
   clearPlayerRoom,
   deleteRoom,
-  getAllRooms,
+  getRoom,
 } from "./raceRoom.js";
 
-// Player registry: socketId → player data (from auth)
 const connectedPlayers = new Map();
+const ADMIN_ROOM = "admin-room";
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "shams-admin-2026";
+const ADMIN_COUNTDOWN_STEPS = Array.from({ length: 11 }, (_, index) => 10 - index);
 
 export function setupSocket(httpServer) {
   const io = new Server(httpServer, {
@@ -58,13 +28,35 @@ export function setupSocket(httpServer) {
     pingTimeout: 5000,
   });
 
-  // ── Namespace: /race ──
   const raceNs = io.of("/race");
 
   raceNs.on("connection", (socket) => {
     console.log(`🔌 Socket connected: ${socket.id}`);
 
-    // ─── JOIN ROOM ───
+    socket.on(EVENTS.ADMIN_CONNECT, (data = {}, ack) => {
+      try {
+        if (data.token !== ADMIN_SECRET) {
+          throw new Error("ADMIN_REQUIRED");
+        }
+
+        socket.join(ADMIN_ROOM);
+        const room = getOrCreateDefaultRoom();
+
+        if (ack) {
+          ack({
+            success: true,
+            roomId: room.roomId,
+            status: room.status,
+            players: room.getPlayerList(),
+          });
+        }
+      } catch (err) {
+        const error = { error: err.message, message: getErrorMessage(err.message) };
+        if (ack) ack(error);
+        socket.emit(EVENTS.ERROR, error);
+      }
+    });
+
     socket.on(EVENTS.JOIN_ROOM, (data, ack) => {
       try {
         const { playerId, playerName, school, avatar, roomId } = data;
@@ -76,7 +68,6 @@ export function setupSocket(httpServer) {
           return;
         }
 
-        // Store player data on socket
         const playerData = {
           id: playerId,
           name: playerName,
@@ -85,7 +76,6 @@ export function setupSocket(httpServer) {
         };
         connectedPlayers.set(socket.id, playerData);
 
-        // Get or create room
         const room = roomId ? getRoom(roomId) : getOrCreateDefaultRoom();
         if (!room) {
           const err = { error: "ROOM_NOT_FOUND", message: "الغرفة غير موجودة" };
@@ -94,18 +84,14 @@ export function setupSocket(httpServer) {
           return;
         }
 
-        // Add player to room
         const players = room.addPlayer(socket.id, playerData);
         setPlayerRoom(socket.id, room.roomId);
-
-        // Join the Socket.io room
         socket.join(room.roomId);
 
-        // Send success to joining player
         const response = {
           success: true,
           roomId: room.roomId,
-          text: room.text,       // empty until countdown
+          text: room.text,
           textLength: room.text.length,
           maxDuration: room.maxDuration,
           players,
@@ -115,17 +101,19 @@ export function setupSocket(httpServer) {
         if (ack) ack(response);
         socket.emit(EVENTS.ROOM_JOINED, response);
 
-        // Broadcast room update to all
-        raceNs.to(room.roomId).emit(EVENTS.ROOM_UPDATE, {
+        const roomUpdate = {
           roomId: room.roomId,
           status: room.status,
           players: room.getPlayerList(),
           playerCount: room.players.size,
+        };
+        raceNs.to(room.roomId).emit(EVENTS.ROOM_UPDATE, roomUpdate);
+        raceNs.to(ADMIN_ROOM).emit(EVENTS.ADMIN_PLAYER_JOINED, {
+          ...roomUpdate,
+          player: roomUpdate.players.find((entry) => entry.playerId === playerId) || null,
         });
 
-        console.log(
-          `👤 ${playerName} (${playerId}) joined room ${room.roomId} [${room.players.size} players]`
-        );
+        console.log(`👤 ${playerName} (${playerId}) joined room ${room.roomId} [${room.players.size} players]`);
       } catch (err) {
         const error = { error: err.message, message: getErrorMessage(err.message) };
         if (ack) ack(error);
@@ -133,7 +121,6 @@ export function setupSocket(httpServer) {
       }
     });
 
-    // ─── PLAYER READY ───
     socket.on(EVENTS.PLAYER_READY, (_data, ack) => {
       try {
         const room = getPlayerRoom(socket.id);
@@ -142,51 +129,29 @@ export function setupSocket(httpServer) {
         const result = room.setReady(socket.id);
         const player = connectedPlayers.get(socket.id);
 
-        // Acknowledge to sender
         if (ack) ack({ success: true, ready: true });
 
-        // Broadcast ready state
         raceNs.to(room.roomId).emit(EVENTS.PLAYER_READY_ACK, {
           playerId: result.playerId,
           playerName: player?.name,
           players: result.players,
         });
 
+        raceNs.to(ADMIN_ROOM).emit(EVENTS.ADMIN_PLAYER_READY, {
+          roomId: room.roomId,
+          playerId: result.playerId,
+          playerName: player?.name,
+          players: result.players,
+          status: room.status,
+        });
+
         console.log(`✅ ${player?.name} ready in ${room.roomId}`);
 
-        // If all ready → trigger countdown
         if (result.allReady) {
-          console.log(`🏁 All ready in ${room.roomId} — starting countdown`);
-
           raceNs.to(room.roomId).emit(EVENTS.ALL_READY, {
             roomId: room.roomId,
-            message: "الجميع جاهز! الاستعداد...",
+            message: "الجميع جاهز! في انتظار بدء المشرف...",
           });
-
-          // Server-controlled countdown
-          room.startCountdown(
-            // onCountdown
-            (value, step) => {
-              raceNs.to(room.roomId).emit(EVENTS.COUNTDOWN_TICK, {
-                value,
-                step: step + 1,
-                totalSteps: 3,
-              });
-            },
-            // onStart
-            () => {
-              raceNs.to(room.roomId).emit(EVENTS.RACE_START, {
-                roomId: room.roomId,
-                text: room.text,
-                textLength: room.text.length,
-                textId: room.textId,
-                maxDuration: room.maxDuration,
-                startedAt: room.startedAt,
-                players: room.getPlayerList(),
-              });
-              console.log(`🚀 Race started in ${room.roomId}`);
-            }
-          );
         }
       } catch (err) {
         const error = { error: err.message, message: getErrorMessage(err.message) };
@@ -195,14 +160,58 @@ export function setupSocket(httpServer) {
       }
     });
 
-    // ─── PLAYER PROGRESS ───
+    socket.on(EVENTS.ADMIN_START_RACE, (data = {}, ack) => {
+      try {
+        if (data.adminToken !== ADMIN_SECRET) {
+          throw new Error("ADMIN_REQUIRED");
+        }
+
+        const room = getOrCreateDefaultRoom();
+
+        room.startCountdown(
+          (value, step) => {
+            raceNs.to(room.roomId).emit(EVENTS.COUNTDOWN_TICK, {
+              value,
+              step: step + 1,
+              totalSteps: ADMIN_COUNTDOWN_STEPS.length,
+            });
+          },
+          () => {
+            const payload = {
+              roomId: room.roomId,
+              text: room.text,
+              textLength: room.text.length,
+              textId: room.textId,
+              maxDuration: room.maxDuration,
+              startedAt: room.startedAt,
+              players: room.getPlayerList(),
+            };
+            raceNs.to(room.roomId).emit(EVENTS.RACE_START, payload);
+            raceNs.to(ADMIN_ROOM).emit(EVENTS.ROOM_UPDATE, {
+              roomId: room.roomId,
+              status: room.status,
+              players: room.getPlayerList(),
+              playerCount: room.players.size,
+            });
+            console.log(`🚀 Race started in ${room.roomId}`);
+          },
+          ADMIN_COUNTDOWN_STEPS
+        );
+
+        if (ack) ack({ success: true, roomId: room.roomId });
+      } catch (err) {
+        const error = { error: err.message, message: getErrorMessage(err.message) };
+        if (ack) ack(error);
+        socket.emit(EVENTS.ERROR, error);
+      }
+    });
+
     socket.on(EVENTS.PLAYER_PROGRESS, (data) => {
       try {
         const room = getPlayerRoom(socket.id);
         if (!room || room.status !== "racing") return;
 
         const { typed, correctChars, totalKeystrokes, elapsed } = data;
-
         const result = room.updateProgress(socket.id, {
           typed,
           correctChars,
@@ -210,7 +219,6 @@ export function setupSocket(httpServer) {
           elapsed,
         });
 
-        // Broadcast progress to all players in room
         raceNs.to(room.roomId).emit(EVENTS.PLAYER_PROGRESS_ACK, {
           playerId: result.playerId,
           progress: result.progress,
@@ -219,12 +227,11 @@ export function setupSocket(httpServer) {
           score: result.score,
           finished: result.finished,
         });
-      } catch (err) {
-        // Silently ignore progress errors (race ended, etc.)
+      } catch (_err) {
+        // Ignore stale progress after race end.
       }
     });
 
-    // ─── PLAYER FINISH ───
     socket.on(EVENTS.PLAYER_FINISH, (data, ack) => {
       try {
         const room = getPlayerRoom(socket.id);
@@ -235,7 +242,6 @@ export function setupSocket(httpServer) {
 
         if (ack) ack({ success: true, stats: result.stats });
 
-        // Broadcast finish
         raceNs.to(room.roomId).emit(EVENTS.PLAYER_FINISH_ACK, {
           playerId: result.playerId,
           playerName: player?.name,
@@ -243,11 +249,8 @@ export function setupSocket(httpServer) {
           finished: true,
         });
 
-        console.log(
-          `🏆 ${player?.name} finished: ${result.stats.wpm}WPM ${result.stats.accuracy}% score:${result.stats.score}`
-        );
+        console.log(`🏆 ${player?.name} finished: ${result.stats.wpm}WPM ${result.stats.accuracy}% score:${result.stats.score}`);
 
-        // If all finished → end race
         if (result.allFinished) {
           endRace(io, room);
         }
@@ -258,12 +261,10 @@ export function setupSocket(httpServer) {
       }
     });
 
-    // ─── LEAVE ROOM ───
     socket.on(EVENTS.LEAVE_ROOM, () => {
       handleDisconnect(socket);
     });
 
-    // ─── DISCONNECT ───
     socket.on("disconnect", (reason) => {
       console.log(`🔌 Socket disconnected: ${socket.id} (${reason})`);
       handleDisconnect(socket);
@@ -272,8 +273,6 @@ export function setupSocket(httpServer) {
 
   return io;
 }
-
-// ── Helpers ──
 
 function handleDisconnect(socket) {
   const room = getPlayerRoom(socket.id);
@@ -284,16 +283,22 @@ function handleDisconnect(socket) {
     clearPlayerRoom(socket.id);
 
     if (!result.empty) {
-      // Notify remaining players
       raceNs_to(socket).emit(EVENTS.PLAYER_LEFT, {
         playerId: player?.id,
         playerName: player?.name,
         players: result.players,
         roomStatus: room.status,
       });
+
+      raceNs_to(socket).to(ADMIN_ROOM).emit(EVENTS.ADMIN_PLAYER_JOINED, {
+        roomId: room.roomId,
+        status: room.status,
+        player: null,
+        players: result.players,
+        playerCount: result.players.length,
+      });
     }
 
-    // If room is empty and finished/waiting, clean up
     if (result.empty) {
       deleteRoom(room.roomId);
       console.log(`🗑️ Room ${room.roomId} deleted (empty)`);
@@ -316,13 +321,12 @@ function endRace(io, room) {
     duration: result.duration,
   });
 
-  console.log(
-    `🏁 Race ended in ${room.roomId} — Winner: ${result.standings[0]?.name} (${result.standings[0]?.stats.wpm}WPM)`
-  );
+  console.log(`🏁 Race ended in ${room.roomId} — Winner: ${result.standings[0]?.name} (${result.standings[0]?.stats.wpm}WPM)`);
 }
 
 function getErrorMessage(code) {
   const MSG = {
+    ADMIN_REQUIRED: "صلاحية المشرف مطلوبة",
     RACE_ALREADY_STARTED: "السباق بدأ بالفعل",
     ROOM_FULL: "الغرفة ممتلئة",
     PLAYER_ALREADY_IN_ROOM: "اللاعب موجود بالفعل",
@@ -339,7 +343,6 @@ function getErrorMessage(code) {
   return MSG[code] || "حدث خطأ";
 }
 
-// Helper to get namespace from socket
 function raceNs_to(socket) {
   return socket.nsp;
 }

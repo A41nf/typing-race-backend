@@ -21,6 +21,8 @@ export const EVENTS = {
   // Client → Server
   JOIN_ROOM:       "join_room",
   LEAVE_ROOM:      "leave_room",
+  ADMIN_CONNECT:   "admin_connect",
+  ADMIN_START_RACE: "admin_start_race",
   PLAYER_READY:    "player_ready",
   PLAYER_PROGRESS: "player_progress",
   PLAYER_FINISH:   "player_finish",
@@ -30,6 +32,8 @@ export const EVENTS = {
   ROOM_UPDATE:     "room_update",
   PLAYER_LEFT:     "player_left",
   PLAYER_READY_ACK: "player_ready",
+  ADMIN_PLAYER_JOINED: "admin_player_joined",
+  ADMIN_PLAYER_READY: "admin_player_ready",
   ALL_READY:       "all_ready",
   COUNTDOWN_TICK:  "countdown_tick",
   RACE_START:      "race_start",

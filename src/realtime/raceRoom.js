@@ -34,7 +34,6 @@ import { RACE_TEXTS } from "../data/texts.js";
 
 const MAX_PLAYERS = 10;
 const MAX_DURATION = 120; // seconds
-const COUNTDOWN_STEPS = [3, 2, 1];
 const COUNTDOWN_INTERVAL_MS = 1000;
 
 export class RaceRoom {
@@ -129,7 +128,7 @@ export class RaceRoom {
    * Start countdown → returns callback to emit each step.
    * Calls onCountdown(step) for each number, onStart() when done.
    */
-  startCountdown(onCountdown, onStart) {
+  startCountdown(onCountdown, onStart, countdownSteps = [3, 2, 1]) {
     if (!this.isAllReady()) throw new Error("NOT_ALL_READY");
     if (this.status !== "waiting") throw new Error("INVALID_STATE");
 
@@ -138,9 +137,9 @@ export class RaceRoom {
 
     let step = 0;
     const tick = () => {
-      if (step < COUNTDOWN_STEPS.length) {
-        this.countdown = COUNTDOWN_STEPS[step];
-        onCountdown(COUNTDOWN_STEPS[step], step);
+      if (step < countdownSteps.length) {
+        this.countdown = countdownSteps[step];
+        onCountdown(countdownSteps[step], step);
         step++;
         this.countdownTimer = setTimeout(tick, COUNTDOWN_INTERVAL_MS);
       } else {
