@@ -133,7 +133,8 @@ export class RaceRoom {
     if (this.status !== "waiting") throw new Error("INVALID_STATE");
 
     this.status = "countdown";
-    this.selectText();
+    // Only pick a random text if none was set externally (e.g. by admin frontend)
+    if (!this.text) this.selectText();
 
     let step = 0;
     const tick = () => {
