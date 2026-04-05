@@ -168,6 +168,14 @@ export function setupSocket(httpServer) {
 
         const room = getOrCreateDefaultRoom();
 
+        // If the admin frontend sent a specific text, use it; otherwise let the room pick one.
+        if (data.text && typeof data.text === "string" && data.text.trim().length > 0) {
+          room.text = data.text.trim();
+          room.textId = null;
+        } else if (!room.text) {
+          room.selectText();
+        }
+
         room.startCountdown(
           (value, step) => {
             raceNs.to(room.roomId).emit(EVENTS.COUNTDOWN_TICK, {
