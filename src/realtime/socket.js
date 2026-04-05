@@ -178,11 +178,9 @@ export function setupSocket(httpServer) {
 
         room.startCountdown(
           (value, step) => {
-            raceNs.to(room.roomId).emit(EVENTS.COUNTDOWN_TICK, {
-              value,
-              step: step + 1,
-              totalSteps: ADMIN_COUNTDOWN_STEPS.length,
-            });
+            const tickPayload = { value, step: step + 1, totalSteps: ADMIN_COUNTDOWN_STEPS.length };
+            raceNs.to(room.roomId).emit(EVENTS.COUNTDOWN_TICK, tickPayload);
+            raceNs.to(ADMIN_ROOM).emit(EVENTS.COUNTDOWN_TICK, tickPayload);
           },
           () => {
             const payload = {
