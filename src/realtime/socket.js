@@ -203,7 +203,8 @@ export function setupSocket(httpServer) {
             });
             console.log(`🚀 Race started in ${room.roomId}`);
           },
-          ADMIN_COUNTDOWN_STEPS
+          ADMIN_COUNTDOWN_STEPS,
+          () => endRace(io, room)
         );
 
         if (ack) ack({ success: true, roomId: room.roomId });

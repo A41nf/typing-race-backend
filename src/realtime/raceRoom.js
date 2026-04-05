@@ -128,7 +128,7 @@ export class RaceRoom {
    * Start countdown → returns callback to emit each step.
    * Calls onCountdown(step) for each number, onStart() when done.
    */
-  startCountdown(onCountdown, onStart, countdownSteps = [3, 2, 1]) {
+  startCountdown(onCountdown, onStart, countdownSteps = [3, 2, 1], onTimeout = null) {
     if (!this.isAllReady()) throw new Error("NOT_ALL_READY");
     if (this.status !== "waiting") throw new Error("INVALID_STATE");
 
@@ -149,9 +149,10 @@ export class RaceRoom {
         this.countdown = null;
         onStart();
 
-        // Server-side timeout
+        // Server-side timeout — call onTimeout so socket.js can emit race_end
         this.raceTimer = setTimeout(() => {
-          this.finishRace();
+          if (onTimeout) onTimeout();
+          else this.finishRace();
         }, this.maxDuration * 1000);
       }
     };
