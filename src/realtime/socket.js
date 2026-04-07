@@ -166,7 +166,10 @@ export function setupSocket(httpServer) {
           throw new Error("ADMIN_REQUIRED");
         }
 
-        const room = getOrCreateDefaultRoom();
+        const room = data.roomId ? getRoom(data.roomId) : getOrCreateDefaultRoom();
+        if (!room) {
+          throw new Error("ROOM_NOT_FOUND");
+        }
 
         // If the admin frontend sent a specific text, use it; otherwise let the room pick one.
         if (data.text && typeof data.text === "string" && data.text.trim().length > 0) {

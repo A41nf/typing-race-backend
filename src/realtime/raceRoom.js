@@ -216,6 +216,7 @@ export class RaceRoom {
   finishPlayer(socketId, stats) {
     const player = this.players.get(socketId);
     if (!player) throw new Error("PLAYER_NOT_IN_ROOM");
+    if (player.finished) throw new Error("ALREADY_FINISHED");
 
     player.finished = true;
     player.progress = 100;
@@ -272,10 +273,11 @@ export class RaceRoom {
       });
     }
 
-    // Sort: finished first, then by score DESC
+    // Ranking: 1) completion, 2) accuracy (higher is better), 3) wpm (higher is better)
     standings.sort((a, b) => {
       if (a.finished !== b.finished) return b.finished - a.finished;
-      return b.stats.score - a.stats.score;
+      if (a.stats.accuracy !== b.stats.accuracy) return b.stats.accuracy - a.stats.accuracy;
+      return b.stats.wpm - a.stats.wpm;
     });
 
     // Assign ranks
@@ -335,6 +337,7 @@ export class RaceRoom {
 
 const rooms = new Map();
 const playerRooms = new Map(); // socketId → roomId
+let defaultWaitingRoomId = null;
 
 export function createRoom(roomId) {
   const room = new RaceRoom(roomId);
@@ -347,13 +350,22 @@ export function getRoom(roomId) {
 }
 
 export function getOrCreateDefaultRoom() {
-  // Find a waiting room with space, or create one
+  const defaultRoom = defaultWaitingRoomId ? rooms.get(defaultWaitingRoomId) || null : null;
+  if (defaultRoom && defaultRoom.status === "waiting" && defaultRoom.players.size < defaultRoom.maxPlayers) {
+    return defaultRoom;
+  }
+
+  // Reuse one joinable waiting room for the current lobby.
   for (const [, room] of rooms) {
     if (room.status === "waiting" && room.players.size < room.maxPlayers) {
+      defaultWaitingRoomId = room.roomId;
       return room;
     }
   }
-  return createRoom();
+
+  const room = createRoom();
+  defaultWaitingRoomId = room.roomId;
+  return room;
 }
 
 export function deleteRoom(roomId) {
@@ -361,6 +373,9 @@ export function deleteRoom(roomId) {
   if (room) {
     room.cleanup();
     rooms.delete(roomId);
+    if (defaultWaitingRoomId === roomId) {
+      defaultWaitingRoomId = null;
+    }
   }
 }
 
