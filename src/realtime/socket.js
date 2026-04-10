@@ -390,6 +390,7 @@ function handleDisconnect(socket) {
 
 function endRace(io, room) {
   const result = room.finishRace();
+  if (!result) return; // Race already ended (guard against double-call)
   const payload = {
     roomId: room.roomId,
     standings: result.standings,

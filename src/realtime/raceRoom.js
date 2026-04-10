@@ -215,18 +215,22 @@ export class RaceRoom {
   finishPlayer(socketId, stats) {
     const player = this.players.get(socketId);
     if (!player) throw new Error("PLAYER_NOT_IN_ROOM");
-    if (player.finished) throw new Error("ALREADY_FINISHED");
 
-    player.finished = true;
-    player.progress = 100;
-    player.stats = {
-      wpm: Math.round(stats.wpm),
-      accuracy: Math.round(stats.accuracy),
-      score: Math.round(stats.score),
-      time: Math.round(stats.time * 10) / 10,
-      correctChars: stats.correctChars,
-      totalKeystrokes: stats.totalKeystrokes,
-    };
+    // Player may already be marked finished by updateProgress (race condition when
+    // player_progress and player_finish are emitted in the same tick). In that case
+    // we still need to broadcast standings and check allFinished, so don't throw.
+    if (!player.finished) {
+      player.finished = true;
+      player.progress = 100;
+      player.stats = {
+        wpm: Math.round(stats.wpm),
+        accuracy: Math.round(stats.accuracy),
+        score: Math.round(stats.score),
+        time: Math.round(stats.time * 10) / 10,
+        correctChars: stats.correctChars,
+        totalKeystrokes: stats.totalKeystrokes,
+      };
+    }
 
     const standings = this.buildStandings();
     const standing = standings.find((entry) => entry.playerId === player.id) || null;
@@ -253,6 +257,7 @@ export class RaceRoom {
    * End the race — compute final standings.
    */
   finishRace() {
+    if (this.status === "finished") return null;
     clearTimeout(this.raceTimer);
     clearTimeout(this.countdownTimer);
     this.status = "finished";
