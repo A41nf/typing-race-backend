@@ -229,10 +229,16 @@ export class RaceRoom {
       totalKeystrokes: stats.totalKeystrokes,
     };
 
+    const standings = this.buildStandings();
+    const standing = standings.find((entry) => entry.playerId === player.id) || null;
+
     return {
       playerId: player.id,
+      socketId,
       finished: true,
       stats: player.stats,
+      standings,
+      rank: standing?.rank || null,
       allFinished: this.isAllFinished(),
     };
   }
@@ -252,6 +258,16 @@ export class RaceRoom {
     clearTimeout(this.countdownTimer);
     this.status = "finished";
 
+    return {
+      roomId: this.roomId,
+      standings: this.buildStandings(),
+      text: this.text,
+      textId: this.textId,
+      duration: this.startedAt ? (Date.now() - this.startedAt) / 1000 : 0,
+    };
+  }
+
+  buildStandings() {
     const standings = [];
     for (const [socketId, p] of this.players) {
       standings.push({
@@ -285,13 +301,7 @@ export class RaceRoom {
       s.rank = i + 1;
     });
 
-    return {
-      roomId: this.roomId,
-      standings,
-      text: this.text,
-      textId: this.textId,
-      duration: this.startedAt ? (Date.now() - this.startedAt) / 1000 : 0,
-    };
+    return standings;
   }
 
   // ── Queries ──
@@ -311,6 +321,13 @@ export class RaceRoom {
       });
     }
     return list;
+  }
+
+  getSocketIdByPlayerId(playerId) {
+    for (const [socketId, player] of this.players) {
+      if (player.id === playerId) return socketId;
+    }
+    return null;
   }
 
   getPublicState() {

@@ -216,6 +216,64 @@ export function setupSocket(httpServer) {
       }
     });
 
+    socket.on(EVENTS.ADMIN_KICK_PLAYER, (data = {}, ack) => {
+      try {
+        if (data.adminToken !== ADMIN_SECRET) {
+          throw new Error("ADMIN_REQUIRED");
+        }
+
+        const room = data.roomId ? getRoom(data.roomId) : getOrCreateDefaultRoom();
+        if (!room) {
+          throw new Error("ROOM_NOT_FOUND");
+        }
+
+        const targetSocketId = room.getSocketIdByPlayerId(data.playerId);
+        if (!targetSocketId) {
+          throw new Error("PLAYER_NOT_IN_ROOM");
+        }
+
+        const result = room.removePlayer(targetSocketId);
+        clearPlayerRoom(targetSocketId);
+        connectedPlayers.delete(targetSocketId);
+
+        if (ack) ack({ success: true, players: result.players || [] });
+
+        raceNs.to(targetSocketId).emit(EVENTS.PLAYER_KICKED, { reason: "تم طردك من قِبل المشرف" });
+        raceNs.to(ADMIN_ROOM).emit(EVENTS.ADMIN_PLAYER_KICKED, {
+          roomId: room.roomId,
+          status: room.status,
+          players: result.players || [],
+          playerCount: result.players?.length || 0,
+          playerId: data.playerId,
+        });
+
+        if (!result.empty) {
+          if (room.status === "racing" && room.isAllFinished()) {
+            endRace(io, room);
+          }
+
+          const roomUpdate = {
+            roomId: room.roomId,
+            status: room.status,
+            players: result.players,
+            playerCount: result.players.length,
+          };
+          raceNs.to(room.roomId).emit(EVENTS.ROOM_UPDATE, roomUpdate);
+          raceNs.to(room.roomId).emit(EVENTS.PLAYER_LEFT, {
+            playerId: data.playerId,
+            players: result.players,
+            roomStatus: room.status,
+          });
+        } else {
+          deleteRoom(room.roomId);
+        }
+      } catch (err) {
+        const error = { error: err.message, message: getErrorMessage(err.message) };
+        if (ack) ack(error);
+        socket.emit(EVENTS.ERROR, error);
+      }
+    });
+
     socket.on(EVENTS.PLAYER_PROGRESS, (data) => {
       try {
         const room = getPlayerRoom(socket.id);
@@ -257,8 +315,11 @@ export function setupSocket(httpServer) {
 
         const finishPayload = {
           playerId: result.playerId,
+          socketId: socket.id,
           playerName: player?.name,
           stats: result.stats,
+          standings: result.standings,
+          rank: result.rank,
           finished: true,
         };
 
