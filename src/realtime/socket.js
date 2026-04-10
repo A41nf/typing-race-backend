@@ -213,6 +213,7 @@ export function setupSocket(httpServer) {
         const error = { error: err.message, message: getErrorMessage(err.message) };
         if (ack) ack(error);
         socket.emit(EVENTS.ERROR, error);
+        if (room) raceNs.to(room.roomId).emit("race_start_failed", { reason: err.message });
       }
     });
 

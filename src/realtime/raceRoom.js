@@ -129,7 +129,6 @@ export class RaceRoom {
    * Calls onCountdown(step) for each number, onStart() when done.
    */
   startCountdown(onCountdown, onStart, countdownSteps = [3, 2, 1], onTimeout = null) {
-    if (!this.isAllReady()) throw new Error("NOT_ALL_READY");
     if (this.status !== "waiting") throw new Error("INVALID_STATE");
 
     this.status = "countdown";
