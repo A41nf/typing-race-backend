@@ -24,6 +24,7 @@ export const EVENTS = {
   ADMIN_CONNECT:   "admin_connect",
   ADMIN_START_RACE: "admin_start_race",
   ADMIN_KICK_PLAYER: "admin_kick_player",
+  ADMIN_BROADCAST:   "admin_broadcast",
   PLAYER_READY:    "player_ready",
   PLAYER_PROGRESS: "player_progress",
   PLAYER_FINISH:   "player_finish",
@@ -44,4 +45,5 @@ export const EVENTS = {
   PLAYER_FINISH_ACK: "player_finish",
   RACE_END:        "race_end",
   ERROR:           "error",
+  ADMIN_BROADCAST_MSG: "admin_broadcast_msg",
 };

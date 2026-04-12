@@ -275,6 +275,37 @@ export function setupSocket(httpServer) {
       }
     });
 
+    socket.on(EVENTS.ADMIN_BROADCAST, (data = {}, ack) => {
+      try {
+        if (data.adminToken !== ADMIN_SECRET) {
+          throw new Error("ADMIN_REQUIRED");
+        }
+
+        const room = data.roomId ? getRoom(data.roomId) : getOrCreateDefaultRoom();
+        if (!room) {
+          throw new Error("ROOM_NOT_FOUND");
+        }
+
+        if (!data.message || typeof data.message !== "string" || data.message.trim().length === 0) {
+          throw new Error("INVALID_DATA");
+        }
+
+        if (ack) ack({ success: true });
+
+        raceNs.to(room.roomId).emit(EVENTS.ADMIN_BROADCAST_MSG, {
+          message: data.message.trim(),
+          from: "المشرف",
+          timestamp: Date.now(),
+        });
+
+        console.log(`📢 Admin broadcast in ${room.roomId}: "${data.message.trim()}"`);
+      } catch (err) {
+        const error = { error: err.message, message: getErrorMessage(err.message) };
+        if (ack) ack(error);
+        socket.emit(EVENTS.ERROR, error);
+      }
+    });
+
     socket.on(EVENTS.PLAYER_PROGRESS, (data) => {
       try {
         const room = getPlayerRoom(socket.id);

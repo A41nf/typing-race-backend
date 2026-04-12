@@ -55,7 +55,7 @@ export class RaceRoom {
   // ── Player management ──
 
   addPlayer(socketId, { id, name, school, avatar }) {
-    if (this.status !== "waiting") {
+    if (this.status === "finished") {
       throw new Error("RACE_ALREADY_STARTED");
     }
     if (this.players.size >= this.maxPlayers) {
