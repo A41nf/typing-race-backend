@@ -48,6 +48,7 @@ export function setupSocket(httpServer) {
             roomId: room.roomId,
             status: room.status,
             players: room.getPlayerList(),
+            text: room.text || "",
           });
         }
       } catch (err) {
